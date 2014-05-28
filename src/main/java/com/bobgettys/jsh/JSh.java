@@ -12,6 +12,8 @@ import java.awt.event.ActionEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -24,8 +26,12 @@ import javax.swing.AbstractAction;
 import javax.swing.ActionMap;
 import javax.swing.GroupLayout;
 import javax.swing.InputMap;
+import javax.swing.JComponent;
 import javax.swing.JFrame;
+import javax.swing.JPanel;
+import javax.swing.JRootPane;
 import javax.swing.JScrollPane;
+import javax.swing.JTabbedPane;
 import javax.swing.JTextPane;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
@@ -38,7 +44,7 @@ import javax.swing.text.StyledDocument;
 
 import org.apache.commons.lang3.SystemUtils;
 
-public class JSh extends JFrame {
+public class JSh extends JPanel {
 
 	private static final long serialVersionUID = 1L;
 
@@ -60,6 +66,7 @@ public class JSh extends JFrame {
 
 	private final AttributeSet preludeAttributes;
 	private final AttributeSet cwdAttributes;
+	final Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
 	private final HashMap<String, ShellApp> appRegistry = new HashMap<>();
 	final AttributeSet textAttributes;
 	final StyledDocument shellDoc;
@@ -68,20 +75,21 @@ public class JSh extends JFrame {
 	int inputStart;
 
 	public JSh() {
-		super("Jsh");
 		setFocusTraversalKeysEnabled(false);
 		cwd = System.getProperty("user.dir");
 
-		GroupLayout layout = new GroupLayout(getContentPane());
-		getContentPane().setLayout(layout);
-		setSize(800, 600);
+		GroupLayout layout = new GroupLayout(this);
+		setLayout(layout);
+		// Container parent = getParent();
+		// setSize(parent.getSize());
+		// setSize(800, 600);
 		shell = new JTextPane();
 		shellDoc = shell.getStyledDocument();
 		shell.setSize(getSize());
 		shell.setBackground(Color.BLACK);
 		shell.setMargin(new Insets(0, 1, 1, 0));
 		shell.setFont(new Font("Monospaced", Font.PLAIN, 12));
-		shell.setEditable(true);
+		shell.setEditable(false);
 		shell.getCaret().setVisible(true);
 
 		StyleContext sc = StyleContext.getDefaultStyleContext();
@@ -101,11 +109,16 @@ public class JSh extends JFrame {
 		ActionMap actionMap = shell.getActionMap();
 
 		String interrupt = "interrupt";
-		inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_C, KeyEvent.VK_CONTROL), interrupt);
+		KeyStroke ctrlC = KeyStroke.getKeyStroke(KeyEvent.VK_C, InputEvent.CTRL_MASK);
+		inputMap.remove(ctrlC);
+		inputMap.put(ctrlC, interrupt);
 		actionMap.put(interrupt, new AbstractAction() {
+
+			private static final long serialVersionUID = 1L;
 
 			@Override
 			public void actionPerformed(ActionEvent e) {
+				doInterrupt();
 			}
 
 		});
@@ -160,7 +173,7 @@ public class JSh extends JFrame {
 			}
 
 		});
-		final Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
+
 		String copy = "copy";
 		inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_C, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK),
 				copy);
@@ -175,6 +188,16 @@ public class JSh extends JFrame {
 			}
 
 		});
+		shell.addMouseListener(new MouseAdapter() {
+
+			@Override
+			public void mouseClicked(MouseEvent e) {
+				if (SwingUtilities.isRightMouseButton(e)) {
+					doPaste();
+				}
+			}
+
+		});
 		String paste = "paste";
 		inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_V, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK),
 				paste);
@@ -184,18 +207,7 @@ public class JSh extends JFrame {
 
 			@Override
 			public void actionPerformed(ActionEvent e) {
-				if (clipboard.isDataFlavorAvailable(DataFlavor.stringFlavor)) {
-					if (shell.getCaretPosition() < inputStart) {
-						shell.setCaretPosition(shellDoc.getLength());
-					}
-					int pos = shell.getCaretPosition();
-					try {
-						String pasteText = (String) clipboard.getData(DataFlavor.stringFlavor);
-						shellDoc.insertString(pos, pasteText, textAttributes);
-						shell.moveCaretPosition(pasteText.length());
-					} catch (BadLocationException | UnsupportedFlavorException | IOException e1) {
-					}
-				}
+				doPaste();
 			}
 
 		});
@@ -284,18 +296,24 @@ public class JSh extends JFrame {
 		}
 	}
 
-	public static void main(String[] args) throws InvocationTargetException, InterruptedException {
-		SwingUtilities.invokeAndWait(new Runnable() {
-
-			@Override
-			public void run() {
-				JSh jsh = new JSh();
-				jsh.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-				jsh.setVisible(true);
+	void doPaste() {
+		if (clipboard.isDataFlavorAvailable(DataFlavor.stringFlavor)) {
+			if (shell.getCaretPosition() < inputStart) {
+				shell.setCaretPosition(shellDoc.getLength());
 			}
+			int pos = shell.getCaretPosition();
+			try {
+				String pasteText = (String) clipboard.getData(DataFlavor.stringFlavor);
+				shellDoc.insertString(pos, pasteText, textAttributes);
+				shell.moveCaretPosition(pasteText.length());
+			} catch (BadLocationException | UnsupportedFlavorException | IOException e1) {
+			}
+		}
+	}
 
-		});
-
+	void doInterrupt() {
+		System.out.println("interrupt");
+		// TODO: implement later (Ctrl + C interrupt behavior)
 	}
 
 	static boolean isPrintableChar(char c) {
@@ -303,4 +321,42 @@ public class JSh extends JFrame {
 		return !Character.isISOControl(c) && c != KeyEvent.CHAR_UNDEFINED && block != null
 				&& block != Character.UnicodeBlock.SPECIALS;
 	}
+
+	public static void main(String[] args) throws InvocationTargetException, InterruptedException {
+		SwingUtilities.invokeAndWait(new Runnable() {
+
+			@Override
+			public void run() {
+				JSh jsh = new JSh();
+				JTabbedPane tabPane = new JTabbedPane();
+				tabPane.addTab("Jsh", jsh);
+				JFrame window = new JFrame("Jsh");
+				tabPane.setSize(window.getSize());
+				jsh.setSize(tabPane.getSize());
+				window.add(tabPane);
+				window.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+				window.setSize(800, 600);
+				window.setVisible(true);
+				JRootPane rootPane = window.getRootPane();
+				String newTab = "newTab";
+				rootPane.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(
+						KeyStroke.getKeyStroke(KeyEvent.VK_T, InputEvent.CTRL_MASK | InputEvent.SHIFT_MASK), newTab);
+				rootPane.getActionMap().put(newTab, new AbstractAction() {
+
+					private static final long serialVersionUID = 1L;
+
+					@Override
+					public void actionPerformed(ActionEvent e) {
+						JSh jsh = new JSh();
+						tabPane.addTab("Jsh", jsh);
+						jsh.setSize(tabPane.getSize());
+					}
+
+				});
+			}
+
+		});
+
+	}
+
 }
