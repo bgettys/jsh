@@ -81,22 +81,35 @@ public class JSh extends JFrame {
 		shell.setBackground(Color.BLACK);
 		shell.setMargin(new Insets(0, 1, 1, 0));
 		shell.setFont(new Font("Monospaced", Font.PLAIN, 12));
-		shell.setEditable(false);
+		shell.setEditable(true);
 		shell.getCaret().setVisible(true);
 
 		StyleContext sc = StyleContext.getDefaultStyleContext();
-		preludeAttributes = sc.addAttribute(SimpleAttributeSet.EMPTY, StyleConstants.Foreground, Color.GREEN);
-		// Style bold = sc.addStyle("bold", null);
+		AttributeSet preludeAttributes = sc.addAttribute(SimpleAttributeSet.EMPTY, StyleConstants.Foreground,
+				new Color(0x0070FF70));
+		this.preludeAttributes = sc.addAttribute(preludeAttributes, StyleConstants.Bold, true);
 		sc = StyleContext.getDefaultStyleContext();
-		cwdAttributes = sc.addAttribute(SimpleAttributeSet.EMPTY, StyleConstants.Foreground, new Color(0x000077FF));
+		AttributeSet cwdAttributes = sc.addAttribute(SimpleAttributeSet.EMPTY, StyleConstants.Foreground, new Color(
+				0x000040FF));
+		this.cwdAttributes = sc.addAttribute(cwdAttributes, StyleConstants.Bold, true);
 		textAttributes = StyleContext.getDefaultStyleContext().addAttribute(SimpleAttributeSet.EMPTY,
 				StyleConstants.Foreground, Color.WHITE);
 		shell.setCharacterAttributes(textAttributes, true);
 		addPrelude();
 
-		String enter = "enter";
 		InputMap inputMap = shell.getInputMap();
 		ActionMap actionMap = shell.getActionMap();
+
+		String interrupt = "interrupt";
+		inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_C, KeyEvent.VK_CONTROL), interrupt);
+		actionMap.put(interrupt, new AbstractAction() {
+
+			@Override
+			public void actionPerformed(ActionEvent e) {
+			}
+
+		});
+		String enter = "enter";
 		inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), enter);
 		actionMap.put(enter, new AbstractAction() {
 
@@ -196,13 +209,16 @@ public class JSh extends JFrame {
 				}
 				int pos = shell.getCaretPosition();
 				try {
-					switch (e.getKeyCode()) {
-					case KeyEvent.VK_ENTER:
-					case KeyEvent.VK_BACK_SPACE:
+					char c = e.getKeyChar();
+					switch (c) {
+					case '\n':
+					case '\b':
 						break;
 					default:
-						shellDoc.insertString(pos, String.valueOf(e.getKeyChar()), textAttributes);
-						shell.setCaretPosition(pos + 1);
+						if (isPrintableChar(c)) {
+							shellDoc.insertString(pos, String.valueOf(c), textAttributes);
+							shell.setCaretPosition(pos + 1);
+						}
 					}
 
 				} catch (BadLocationException ex) {
@@ -280,5 +296,11 @@ public class JSh extends JFrame {
 
 		});
 
+	}
+
+	static boolean isPrintableChar(char c) {
+		Character.UnicodeBlock block = Character.UnicodeBlock.of(c);
+		return !Character.isISOControl(c) && c != KeyEvent.CHAR_UNDEFINED && block != null
+				&& block != Character.UnicodeBlock.SPECIALS;
 	}
 }
