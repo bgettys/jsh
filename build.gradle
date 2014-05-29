@@ -3,13 +3,29 @@ apply plugin: 'java'
 apply plugin: 'application'
 sourceCompatibility = 1.8
 version = '1.0'
+mainClassName = "com.bobgettys.jsh.Main"
+
 project.ext.appName = "Jsh"
-project.ext.mainClasName = "com.bobgettys.jsh.Main"
+project.ext.jarManifest = {
+	attributes 'Implementation-Title': appName, 
+		'Implementation-Version': version,
+		'Built-Date': new Date(),
+        'Built-JDK': System.getProperty('java.version'),
+        'Main-Class': mainClassName
+} 
+
 
 task slimJar(type: Jar) {
 	from files(sourceSets.main.output.classesDir)
-	manifest {attributes 'Implementation-Title': appName, 'Implementation-Version': version}
+	manifest jarManifest
 }
+
+jar {
+	baseName = project.name + '-all'
+    from { configurations.compile.collect { it.isDirectory() ? it : zipTree(it) } }
+    manifest jarManifest
+}
+jar.dependsOn slimJar
 
 repositories {
 	mavenCentral()
@@ -20,13 +36,6 @@ dependencies {
 	compile 'commons-cli:commons-cli:1.2'
 	compile 'org.apache.commons:commons-lang3:3.3.2'
 }
-
-jar {
-	baseName = project.name + '-all'
-    from { configurations.compile.collect { it.isDirectory() ? it : zipTree(it) } }
-    manifest {attributes 'Implementation-Title': appName, 'Implementation-Version': version}
-}
-jar.dependsOn slimJar
 
 uploadArchives {
 	repositories {
