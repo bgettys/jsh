@@ -10,14 +10,14 @@ import java.awt.datatransfer.StringSelection;
 import java.awt.datatransfer.UnsupportedFlavorException;
 import java.awt.event.ActionEvent;
 import java.awt.event.InputEvent;
+import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
-import java.awt.event.KeyListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.lang.reflect.InvocationTargetException;
+import java.io.InterruptedIOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.HashMap;
@@ -26,12 +26,8 @@ import javax.swing.AbstractAction;
 import javax.swing.ActionMap;
 import javax.swing.GroupLayout;
 import javax.swing.InputMap;
-import javax.swing.JComponent;
-import javax.swing.JFrame;
 import javax.swing.JPanel;
-import javax.swing.JRootPane;
 import javax.swing.JScrollPane;
-import javax.swing.JTabbedPane;
 import javax.swing.JTextPane;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
@@ -44,7 +40,7 @@ import javax.swing.text.StyledDocument;
 
 import org.apache.commons.lang3.SystemUtils;
 
-public class JSh extends JPanel {
+public class Shell extends JPanel {
 
 	private static final long serialVersionUID = 1L;
 
@@ -74,15 +70,12 @@ public class JSh extends JPanel {
 	private final String cwd;
 	int inputStart;
 
-	public JSh() {
+	public Shell() {
+		// Basic attributes of the editing pane
 		setFocusTraversalKeysEnabled(false);
 		cwd = System.getProperty("user.dir");
-
 		GroupLayout layout = new GroupLayout(this);
 		setLayout(layout);
-		// Container parent = getParent();
-		// setSize(parent.getSize());
-		// setSize(800, 600);
 		shell = new JTextPane();
 		shellDoc = shell.getStyledDocument();
 		shell.setSize(getSize());
@@ -92,6 +85,8 @@ public class JSh extends JPanel {
 		shell.setEditable(false);
 		shell.getCaret().setVisible(true);
 
+		// styles for the prelude (username@host), current working directory,
+		// and normal text
 		StyleContext sc = StyleContext.getDefaultStyleContext();
 		AttributeSet preludeAttributes = sc.addAttribute(SimpleAttributeSet.EMPTY, StyleConstants.Foreground,
 				new Color(0x0070FF70));
@@ -103,10 +98,25 @@ public class JSh extends JPanel {
 		textAttributes = StyleContext.getDefaultStyleContext().addAttribute(SimpleAttributeSet.EMPTY,
 				StyleConstants.Foreground, Color.WHITE);
 		shell.setCharacterAttributes(textAttributes, true);
-		addPrelude();
 
+		addPrompt();
+
+		// hotkeys and hotkey overrides
 		InputMap inputMap = shell.getInputMap();
 		ActionMap actionMap = shell.getActionMap();
+
+		String home = "home";
+		inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_HOME, 0), home);
+		actionMap.put(home, new AbstractAction() {
+
+			private static final long serialVersionUID = 1L;
+
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				shell.setCaretPosition(inputStart);
+			}
+
+		});
 
 		String interrupt = "interrupt";
 		KeyStroke ctrlC = KeyStroke.getKeyStroke(KeyEvent.VK_C, InputEvent.CTRL_MASK);
@@ -122,6 +132,7 @@ public class JSh extends JPanel {
 			}
 
 		});
+
 		String enter = "enter";
 		inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), enter);
 		actionMap.put(enter, new AbstractAction() {
@@ -146,13 +157,14 @@ public class JSh extends JPanel {
 				} catch (BadLocationException e1) {
 					e1.printStackTrace(System.err);
 				}
-				addPrelude();
+				addPrompt();
 			}
 
 		});
-		String backSpace = "back space";
-		inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_BACK_SPACE, 0), backSpace);
-		actionMap.put(backSpace, new AbstractAction() {
+
+		String delete = "delete";
+		inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_DELETE, 0), delete);
+		actionMap.put(delete, new AbstractAction() {
 
 			private static final long serialVersionUID = 1L;
 
@@ -162,12 +174,10 @@ public class JSh extends JPanel {
 					shell.setCaretPosition(shellDoc.getLength());
 				}
 				int pos = shell.getCaretPosition();
-				if (pos > inputStart) {
+				if (pos >= inputStart && pos < shellDoc.getLength()) {
 					try {
-						shellDoc.remove(--pos, 1);
-						shell.setCaretPosition(pos);
+						shellDoc.remove(pos, 1);
 					} catch (BadLocationException e1) {
-						e1.printStackTrace(System.err);
 					}
 				}
 			}
@@ -188,6 +198,7 @@ public class JSh extends JPanel {
 			}
 
 		});
+
 		shell.addMouseListener(new MouseAdapter() {
 
 			@Override
@@ -212,7 +223,7 @@ public class JSh extends JPanel {
 
 		});
 
-		KeyListener listener = new KeyListener() {
+		KeyAdapter listener = new KeyAdapter() {
 
 			@Override
 			public void keyTyped(KeyEvent e) {
@@ -224,7 +235,12 @@ public class JSh extends JPanel {
 					char c = e.getKeyChar();
 					switch (c) {
 					case '\n':
+						break;
 					case '\b':
+						if (pos > inputStart) {
+							shellDoc.remove(--pos, 1);
+							shell.setCaretPosition(pos);
+						}
 						break;
 					default:
 						if (isPrintableChar(c)) {
@@ -237,14 +253,6 @@ public class JSh extends JPanel {
 				}
 			}
 
-			@Override
-			public void keyPressed(KeyEvent e) {
-			}
-
-			@Override
-			public void keyReleased(KeyEvent e) {
-			}
-
 		};
 		shell.addKeyListener(listener);
 		addKeyListener(listener);
@@ -254,7 +262,7 @@ public class JSh extends JPanel {
 		layout.setVerticalGroup(layout.createParallelGroup().addComponent(scrollPane));
 	}
 
-	void addPrelude() {
+	void addPrompt() {
 		try {
 			shellDoc.insertString(shellDoc.getLength(), prelude, preludeAttributes);
 			shellDoc.insertString(shellDoc.getLength(), ":", textAttributes);
@@ -281,17 +289,18 @@ public class JSh extends JPanel {
 				}
 			}
 			p.waitFor();
-		} catch (IOException e) {
-			try {
-				shellDoc.insertString(shellDoc.getLength(), "I/O Error occured while executing command.\n",
-						textAttributes);
-				e.printStackTrace(System.err);
-			} catch (BadLocationException e1) {
-			}
-		} catch (InterruptedException e) {
+		} catch (InterruptedException | InterruptedIOException e) {
 			try {
 				shellDoc.insertString(shellDoc.getLength(), "\n", textAttributes);
 			} catch (BadLocationException e1) {
+				e1.printStackTrace(System.err);
+			}
+		} catch (IOException e) {
+			try {
+				shellDoc.insertString(shellDoc.getLength(), e.getMessage() + '\n', textAttributes);
+				e.printStackTrace(System.err);
+			} catch (BadLocationException e1) {
+				e1.printStackTrace(System.err);
 			}
 		}
 	}
@@ -317,46 +326,8 @@ public class JSh extends JPanel {
 	}
 
 	static boolean isPrintableChar(char c) {
-		Character.UnicodeBlock block = Character.UnicodeBlock.of(c);
-		return !Character.isISOControl(c) && c != KeyEvent.CHAR_UNDEFINED && block != null
-				&& block != Character.UnicodeBlock.SPECIALS;
-	}
-
-	public static void main(String[] args) throws InvocationTargetException, InterruptedException {
-		SwingUtilities.invokeAndWait(new Runnable() {
-
-			@Override
-			public void run() {
-				JSh jsh = new JSh();
-				JTabbedPane tabPane = new JTabbedPane();
-				tabPane.addTab("Jsh", jsh);
-				JFrame window = new JFrame("Jsh");
-				tabPane.setSize(window.getSize());
-				jsh.setSize(tabPane.getSize());
-				window.add(tabPane);
-				window.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-				window.setSize(800, 600);
-				window.setVisible(true);
-				JRootPane rootPane = window.getRootPane();
-				String newTab = "newTab";
-				rootPane.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(
-						KeyStroke.getKeyStroke(KeyEvent.VK_T, InputEvent.CTRL_MASK | InputEvent.SHIFT_MASK), newTab);
-				rootPane.getActionMap().put(newTab, new AbstractAction() {
-
-					private static final long serialVersionUID = 1L;
-
-					@Override
-					public void actionPerformed(ActionEvent e) {
-						JSh jsh = new JSh();
-						tabPane.addTab("Jsh", jsh);
-						jsh.setSize(tabPane.getSize());
-					}
-
-				});
-			}
-
-		});
-
+		return !Character.isISOControl(c) && c != KeyEvent.CHAR_UNDEFINED
+				&& !Character.UnicodeBlock.SPECIALS.equals(Character.UnicodeBlock.of(c));
 	}
 
 }
