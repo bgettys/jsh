@@ -76,7 +76,11 @@ public class Shell extends JPanel {
 		cwd = System.getProperty("user.dir");
 		GroupLayout layout = new GroupLayout(this);
 		setLayout(layout);
+
 		shell = new JTextPane();
+		JScrollPane scrollPane = new JScrollPane(shell);
+		layout.setHorizontalGroup(layout.createSequentialGroup().addComponent(scrollPane));
+		layout.setVerticalGroup(layout.createParallelGroup().addComponent(scrollPane));
 		shellDoc = shell.getStyledDocument();
 		shell.setSize(getSize());
 		shell.setBackground(Color.BLACK);
@@ -234,19 +238,19 @@ public class Shell extends JPanel {
 				try {
 					char c = e.getKeyChar();
 					switch (c) {
-					case '\n':
-						break;
-					case '\b':
-						if (pos > inputStart) {
-							shellDoc.remove(--pos, 1);
-							shell.setCaretPosition(pos);
-						}
-						break;
-					default:
-						if (isPrintableChar(c)) {
-							shellDoc.insertString(pos, String.valueOf(c), textAttributes);
-							shell.setCaretPosition(pos + 1);
-						}
+						case '\n':
+							break;
+						case '\b':
+							if (pos > inputStart) {
+								shellDoc.remove(--pos, 1);
+								shell.setCaretPosition(pos);
+							}
+							break;
+						default:
+							if (isPrintableChar(c)) {
+								shellDoc.insertString(pos, String.valueOf(c), textAttributes);
+								shell.setCaretPosition(pos + 1);
+							}
 					}
 
 				} catch (BadLocationException ex) {
@@ -257,9 +261,6 @@ public class Shell extends JPanel {
 		shell.addKeyListener(listener);
 		addKeyListener(listener);
 
-		JScrollPane scrollPane = new JScrollPane(shell);
-		layout.setHorizontalGroup(layout.createSequentialGroup().addComponent(scrollPane));
-		layout.setVerticalGroup(layout.createParallelGroup().addComponent(scrollPane));
 	}
 
 	void addPrompt() {
